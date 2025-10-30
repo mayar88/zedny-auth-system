@@ -8,6 +8,8 @@ from datetime import datetime, timedelta, timezone
 from typing import Dict
 from dotenv import load_dotenv
 import os
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+
 
 # Load environment variables
 load_dotenv()
@@ -20,8 +22,12 @@ ACCESS_TOKEN_EXPIRE_HOURS = int(os.getenv("ACCESS_TOKEN_EXPIRE_HOURS", 1))
 # Password hashing
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
-# OAuth2 scheme for protected routes
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")
+# old version  if i need use username and password i will use this way 'auth2passwordbearer'
+#oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")
+
+security = HTTPBearer()
+
+
 
 # --- Helper functions ---
 
@@ -41,15 +47,15 @@ def create_access_token(data: Dict[str, str]) -> str:
     to_encode.update({"exp": expire})
     return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
 
-def verify_token(token: str = Depends(oauth2_scheme)):
-    try:
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        user_id = payload.get("sub")
-        if not user_id:
-            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
-        return user_id
-    except JWTError:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Token verification failed")
+def verify_token(credentials: HTTPAuthorizationCredentials = Depends(security)):
+    token = credentials.credentials
+    if not token:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Invalid or missing token"
+        )
+    # (Optional) You can decode/verify your JWT token here if needed.
+    return token
 
 # --- Auth logic functions ---
 
