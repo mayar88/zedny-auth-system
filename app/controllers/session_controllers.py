@@ -1,14 +1,15 @@
-from bson import ObjectId
-from app.core.database import sessions_collection
+from app.core.database import Database
 from app.models.session_model import Session, SessionResponse
 from app.controllers.instructor_controllers import InstructorController
 from app.controllers.user_controllers import UserController
+from bson import ObjectId
 
 class SessionController:
-    def __init__(self):
-        self.sessions_collection = sessions_collection
-        self.instructor_controller = InstructorController()
-        self.user_controller = UserController()
+    def __init__(self, db: Database):
+        self.sessions_collection = db.sessions
+        self.instructor_controller = InstructorController(db)
+        self.user_controller = UserController(db)
+
 
     def normalize_entity(self, entity):
         if entity is None:

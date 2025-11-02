@@ -1,7 +1,7 @@
 from pydantic import BaseModel, Field
-from typing import Optional
 from app.models.instructor_model import InstructorResponse
 from app.models.user_model import UserResponse
+from typing import Optional
 
 
 class Session(BaseModel):
@@ -14,8 +14,8 @@ class SessionResponse(BaseModel):
     id: str = Field(..., alias="_id")
     topic: str
     date: str
-    instructor: InstructorResponse
-    user: UserResponse
+    instructor: Optional[InstructorResponse] = None
+    user: Optional[UserResponse] = None
 
     class Config:
         allow_population_by_field_name = True

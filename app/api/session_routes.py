@@ -3,9 +3,11 @@ from typing import List
 from app.models.session_model import Session, SessionResponse
 from app.controllers.session_controllers import SessionController
 from app.controllers.auth_controllers import AuthController
+from app.core.database import Database
 
-session_controller = SessionController()
-auth_controller = AuthController()
+db = Database()
+session_controller = SessionController(db)
+auth_controller = AuthController(db)
 
 router = APIRouter(
     prefix="/sessions",

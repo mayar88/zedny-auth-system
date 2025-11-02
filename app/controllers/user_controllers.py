@@ -1,11 +1,11 @@
-from app.core.database import users_collection
+from app.core.database import Database
 from app.models.user_model import UserCreate, UserResponse
 from passlib.context import CryptContext
 from bson import ObjectId
 
 class UserController:
-    def __init__(self):
-        self.users_collection = users_collection
+    def __init__(self, db: Database):
+        self.users_collection = db.users
         self.pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
     def create_user(self, user: UserCreate):

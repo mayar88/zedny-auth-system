@@ -1,21 +1,19 @@
-from app.models.user_model import UserCreate, UserResponse
-from app.core.database import users_collection   # <- correct
+from app.core.database import Database
+from app.models.user_model import UserCreate
 from passlib.context import CryptContext
-from jose import jwt, JWTError
+from jose import jwt
 from fastapi import Depends, HTTPException, status
-from fastapi.security import OAuth2PasswordBearer
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from datetime import datetime, timedelta, timezone
 from typing import Dict
-from dotenv import load_dotenv
 import os
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from dotenv import load_dotenv
 
-
-# Load environment variables
 load_dotenv()
 
 class AuthController:
-    def __init__(self):
+    def __init__(self, db: Database):
+        self.users_collection = db.users
         # JWT settings
         self.SECRET_KEY = os.getenv("SECRET_KEY", "supersecret")
         self.ALGORITHM = os.getenv("ALGORITHM", "HS256")
@@ -54,16 +52,16 @@ class AuthController:
 
     # --- Auth logic functions ---
 
-    def signup_logic(self,user: UserCreate):
-        if users_collection.find_one({"username": user.username}):
+    def signup_logic(self, user: UserCreate):
+        if self.users_collection.find_one({"username": user.username}):
             return None, "Username already exists"
         user_dict = user.dict()
         user_dict["password"] = self.hash_password(user.password)
-        result = users_collection.insert_one(user_dict)
+        result = self.users_collection.insert_one(user_dict)
         return str(result.inserted_id), None
 
-    def login_logic(self,username: str, password: str):
-        user = users_collection.find_one({"username": username})
+    def login_logic(self, username: str, password: str):
+        user = self.users_collection.find_one({"username": username})
         if not user or not self.verify_password(password, user["password"]):
             return None, "Invalid username or password"
         token = self.create_access_token({"sub": str(user["_id"])})

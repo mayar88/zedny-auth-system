@@ -1,11 +1,10 @@
-from app.models.instructor_model import InstructorCreate
-from app.core.database import instructors_collection
-from app.models.instructor_model import InstructorResponse
+from app.core.database import Database
+from app.models.instructor_model import InstructorCreate, InstructorResponse
 from bson import ObjectId
 
 class InstructorController:
-    def __init__(self):
-        self.instructors_collection = instructors_collection
+    def __init__(self, db: Database):
+        self.instructors_collection = db.instructors
 
     def create_instructor_logic(self, instructor: InstructorCreate):
         instructor_dict = instructor.dict(by_alias=True)
@@ -38,11 +37,6 @@ class InstructorController:
             return InstructorResponse.model_validate(instructor)
         return None
 
-        instructor = self.instructors_collection.find_one({"_id": oid})
-        if instructor:
-            instructor["id"] = str(instructor["_id"])
-            del instructor["_id"]
-        return instructor
 
     def update_instructor_by_id(self, instructor_id: str, instructor: InstructorCreate):
         try:

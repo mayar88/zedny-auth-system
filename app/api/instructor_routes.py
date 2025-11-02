@@ -1,21 +1,18 @@
-# app/api/instructor_routes.py
 from fastapi import APIRouter, Depends, HTTPException
-from app.models.instructor_model import InstructorCreate, InstructorResponse
-from app.core.database import instructors_collection
-from app.controllers.instructor_controllers import InstructorController
 from app.controllers.auth_controllers import AuthController
+from app.core.database import Database
+from app.controllers.instructor_controllers import InstructorController,InstructorResponse,InstructorCreate
 
-# Initialize controllers
-instructor_controller = InstructorController()
-auth_controller = AuthController()
-
+db = Database()
+instructor_controller = InstructorController(db)
+auth_controller = AuthController(db)
 
 router = APIRouter(
     prefix="/instructors",
     tags=["Instructors"],
     dependencies=[Depends(auth_controller.verify_token)]
 )
-@router.post("/", response_model=InstructorResponse)
+
 @router.post("/", response_model=InstructorResponse)
 def create_instructor(instructor: InstructorCreate):
     created, error = instructor_controller.create_instructor_logic(instructor)

@@ -3,9 +3,11 @@ from typing import List
 from app.models.user_model import UserCreate, UserResponse
 from app.controllers.user_controllers import UserController
 from app.controllers.auth_controllers import AuthController
+from app.core.database import Database
 
-user_controller = UserController()
-auth_controller = AuthController()
+db = Database()
+user_controller = UserController(db)
+auth_controller = AuthController(db)
 
 router = APIRouter(
     prefix="/users",

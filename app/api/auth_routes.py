@@ -1,10 +1,12 @@
-# app/api/auth_routes.py
-from fastapi import APIRouter, HTTPException,Depends
+from fastapi import APIRouter, HTTPException
 from app.controllers.auth_controllers import AuthController
-from app.models.user_model import UserCreate, UserResponse
+from app.models.user_model import UserCreate
+from app.core.database import Database
+
+db = Database()
+auth_controller = AuthController(db)
 
 router = APIRouter(prefix="/auth", tags=["Auth"])
-auth_controller = AuthController()
 
 @router.post("/signup")
 def signup_logic(user: UserCreate):
@@ -19,4 +21,3 @@ def login_logic(username: str, password: str):
     if error:
         raise HTTPException(status_code=401, detail=error)
     return {"access_token": token, "token_type": "bearer"}
-
