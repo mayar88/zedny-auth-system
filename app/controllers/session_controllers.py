@@ -1,54 +1,113 @@
-from datetime import datetime, timedelta
-from jose import jwt, JWTError
-from passlib.context import CryptContext
-from app.core.database import users_collection
-from app.models.user_model import User
-from fastapi import HTTPException, status
-from typing import Dict
-import os
-from dotenv import load_dotenv
 from bson import ObjectId
+from app.core.database import sessions_collection
+from app.models.session_model import Session, SessionResponse
+from app.controllers.instructor_controllers import InstructorController
+from app.controllers.user_controllers import UserController
 
-# Load env
-load_dotenv()
+class SessionController:
+    def __init__(self):
+        self.sessions_collection = sessions_collection
+        self.instructor_controller = InstructorController()
+        self.user_controller = UserController()
 
-SECRET_KEY = os.getenv("SECRET_KEY", "supersecret")
-ALGORITHM = os.getenv("ALGORITHM", "HS256")
-ACCESS_TOKEN_EXPIRE_HOURS = int(os.getenv("ACCESS_TOKEN_EXPIRE_HOURS", 1))
+    def normalize_entity(self, entity):
+        if entity is None:
+            return None
 
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+        if hasattr(entity, "model_dump"):
+            d = entity.model_dump(by_alias=True)
+        else:
+            d = dict(entity)
 
-# --- Helper functions ---
-def hash_password(password: str) -> str:
-    password_bytes = password.encode("utf-8")[:72]
-    password_truncated = password_bytes.decode("utf-8", "ignore")
-    return pwd_context.hash(password_truncated)
+        # Convert 'id' to '_id' if needed
+        if "id" in d and "_id" not in d:
+            d["_id"] = d.pop("id")
 
-def verify_password(plain_password: str, hashed_password: str) -> bool:
-    password_bytes = plain_password.encode("utf-8")[:72]
-    plain_truncated = password_bytes.decode("utf-8", "ignore")
-    return pwd_context.verify(plain_truncated, hashed_password)
+        # Ensure _id is string
+        if "_id" in d and not isinstance(d["_id"], str):
+            d["_id"] = str(d["_id"])
 
-def create_access_token(data: Dict[str, str]) -> str:
-    to_encode = data.copy()
-    expire = datetime.utcnow() + timedelta(hours=ACCESS_TOKEN_EXPIRE_HOURS)
-    to_encode.update({"exp": expire})
-    return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+        return d
 
-# --- Controller functions ---
-def signup_logic(user: User):
-    if users_collection.find_one({"username": user.username}):
-        return None, "Username already exists"
+    def create_session(self, session: Session):
+        result = self.sessions_collection.insert_one(session.dict(by_alias=True))
+        created = self.sessions_collection.find_one({"_id": result.inserted_id})
+        if not created:
+            return None
 
-    user_dict = user.dict(by_alias=True)
-    user_dict["password"] = hash_password(user.password)
-    result = users_collection.insert_one(user_dict)
-    return str(result.inserted_id), None
+        instructor_obj = self.instructor_controller.get_instructor_by_id(created["instructor_id"])
+        user_obj = self.user_controller.get_user_by_id(created["user_id"])
 
-def login_logic(username: str, password: str):
-    user = users_collection.find_one({"username": username})
-    if not user or not verify_password(password, user["password"]):
-        return None, "Invalid username or password"
+        instructor = self.normalize_entity(instructor_obj)
+        user = self.normalize_entity(user_obj)
 
-    token = create_access_token({"sub": str(user["_id"])})
-    return token, None
+        created["_id"] = str(created["_id"])
+        created["id"] = created["_id"]
+        created["instructor"] = instructor
+        created["user"] = user
+
+        created.pop("instructor_id", None)
+        created.pop("user_id", None)
+
+        return SessionResponse.model_validate(created)
+
+    def get_sessions(self):
+        sessions = list(self.sessions_collection.find())
+        result = []
+
+        for session in sessions:
+            session["_id"] = str(session["_id"])
+            session["id"] = session["_id"]
+
+            instructor_obj = self.instructor_controller.get_instructor_by_id(session.get("instructor_id"))
+            user_obj = self.user_controller.get_user_by_id(session.get("user_id"))
+
+            session["instructor"] = self.normalize_entity(instructor_obj)
+            session["user"] = self.normalize_entity(user_obj)
+
+            session.pop("instructor_id", None)
+            session.pop("user_id", None)
+
+            result.append(session)
+
+        return result
+
+    def get_session_by_id(self, session_id: str):
+        try:
+            oid = ObjectId(session_id)
+        except Exception:
+            return None
+        session = self.sessions_collection.find_one({"_id": oid})
+        if session:
+            session["_id"] = str(session["_id"])
+            session["id"] = session["_id"]
+
+            instructor_obj = self.instructor_controller.get_instructor_by_id(session.get("instructor_id"))
+            user_obj = self.user_controller.get_user_by_id(session.get("user_id"))
+
+            session["instructor"] = self.normalize_entity(instructor_obj)
+            session["user"] = self.normalize_entity(user_obj)
+
+            session.pop("instructor_id", None)
+            session.pop("user_id", None)
+
+        return SessionResponse.model_validate(session) if session else None
+
+    def update_session_by_id(self, session_id: str, session: Session):
+        try:
+            oid = ObjectId(session_id)
+        except Exception:
+            return 0
+        result = self.sessions_collection.update_one(
+            {"_id": oid},
+            {"$set": session.dict(exclude={"id"}, by_alias=True)}
+        )
+        return result.matched_count
+
+    def delete_session_by_id(self, session_id: str):
+        try:
+            oid = ObjectId(session_id)
+        except Exception:
+            return 0
+        result = self.sessions_collection.delete_one({"_id": oid})
+        return result.deleted_count

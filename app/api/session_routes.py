@@ -1,41 +1,44 @@
-# app/api/session_routes.py
 from fastapi import APIRouter, Depends, HTTPException
-from app.models.session_model import Session
-from app.core.database import sessions_collection
-from app.controllers.auth_controllers import verify_token
+from typing import List
+from app.models.session_model import Session, SessionResponse
+from app.controllers.session_controllers import SessionController
+from app.controllers.auth_controllers import AuthController
+
+session_controller = SessionController()
+auth_controller = AuthController()
 
 router = APIRouter(
     prefix="/sessions",
     tags=["Sessions"],
-    dependencies=[Depends(verify_token)]
+    dependencies=[Depends(auth_controller.verify_token)]
 )
 
-@router.post("/")
+@router.post("/", response_model=SessionResponse)
 def create_session(session: Session):
-    sessions_collection.insert_one(session.dict())
-    return {"message": "Session created successfully", "session": session}
+    created = session_controller.create_session(session)
+    return created
 
-@router.get("/")
+@router.get("/", response_model=List[SessionResponse])
 def get_sessions():
-    return list(sessions_collection.find({}, {"_id": 0}))
+    return session_controller.get_sessions()
 
-@router.get("/{session_id}")
+@router.get("/{session_id}", response_model=SessionResponse)
 def get_session(session_id: str):
-    session = sessions_collection.find_one({"_id": session_id}, {"_id": 0})
+    session = session_controller.get_session_by_id(session_id)
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")
     return session
 
 @router.put("/{session_id}")
 def update_session(session_id: str, session: Session):
-    result = sessions_collection.update_one({"_id": session_id}, {"$set": session.dict()})
-    if result.matched_count == 0:
+    updated_count = session_controller.update_session_by_id(session_id, session)
+    if updated_count == 0:
         raise HTTPException(status_code=404, detail="Session not found")
     return {"message": "Session updated successfully"}
 
 @router.delete("/{session_id}")
 def delete_session(session_id: str):
-    result = sessions_collection.delete_one({"_id": session_id})
-    if result.deleted_count == 0:
+    deleted_count = session_controller.delete_session_by_id(session_id)
+    if deleted_count == 0:
         raise HTTPException(status_code=404, detail="Session not found")
     return {"message": "Session deleted successfully"}

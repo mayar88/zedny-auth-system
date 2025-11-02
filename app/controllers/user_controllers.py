@@ -1,47 +1,61 @@
 from app.core.database import users_collection
-from app.models.user_model import User
+from app.models.user_model import UserCreate, UserResponse
 from passlib.context import CryptContext
 from bson import ObjectId
 
-# Password hashing
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+class UserController:
+    def __init__(self):
+        self.users_collection = users_collection
+        self.pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
+    def create_user(self, user: UserCreate):
+        if self.users_collection.find_one({"email": user.email}):
+            return None, f"User with email {user.email} already exists"
 
-# Create a new user
-def create_user_logic(user: User):
-    # Check if email already exists
-    if users_collection.find_one({"email": user.email}):
-        return None, "User already exists"
+        user_dict = user.dict()
+        user_dict["password"] = self.pwd_context.hash(user.password)
+        result = self.users_collection.insert_one(user_dict)
 
-    # Hash the password
-    user.password = pwd_context.hash(user.password)
+        created = self.users_collection.find_one({"_id": result.inserted_id})
+        if created:
+            created["_id"] = str(created["_id"])
+        return UserResponse.model_validate(created), None
 
-    # Insert into MongoDB
-    result = users_collection.insert_one(user.dict(by_alias=True))
-    user.id = str(result.inserted_id)
-    return user, None
+    def get_all_users(self):
+        users = list(self.users_collection.find())
+        for u in users:
+            u["_id"] = str(u["_id"])
+        return [UserResponse.model_validate(u) for u in users]
 
+    def get_user_by_id(self, user_id: str):
+        try:
+            oid = ObjectId(user_id)
+        except Exception:
+            return None
 
-# Get all users
-def get_all_users():
-    return list(users_collection.find({}, {"_id": 0}))
+        user = self.users_collection.find_one({"_id": oid})
+        if user:
+            user["_id"] = str(user["_id"])
+        return UserResponse.model_validate(user) if user else None
 
+    def update_user_by_id(self, user_id: str, user: UserCreate):
+        try:
+            oid = ObjectId(user_id)
+        except Exception:
+            return 0
 
-# Get a single user by MongoDB _id
-def get_user_by_id(user_id: str):
-    return users_collection.find_one({"_id": ObjectId(user_id)}, {"_id": 0})
+        update_dict = user.dict(exclude={"password"})  # Optionally exclude password update here
+        # Or hash password if you want to allow password update
+        if user.password:
+            update_dict["password"] = self.pwd_context.hash(user.password)
 
+        result = self.users_collection.update_one({"_id": oid}, {"$set": update_dict})
+        return result.matched_count
 
-# Update user
-def update_user_by_id(user_id: str, user: User):
-    result = users_collection.update_one(
-        {"_id": ObjectId(user_id)},
-        {"$set": user.dict(exclude={"id"}, by_alias=True)}
-    )
-    return result.matched_count
-
-
-# Delete user
-def delete_user_by_id(user_id: str):
-    result = users_collection.delete_one({"_id": ObjectId(user_id)})
-    return result.deleted_count
+    def delete_user_by_id(self, user_id: str):
+        try:
+            oid = ObjectId(user_id)
+        except Exception:
+            return 0
+        result = self.users_collection.delete_one({"_id": oid})
+        return result.deleted_count
