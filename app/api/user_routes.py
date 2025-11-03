@@ -1,43 +1,48 @@
-# app/api/user_routes.py
 from fastapi import APIRouter, Depends, HTTPException
-from app.models.user_model import User
-from app.core.database import users_collection
-from app.controllers.auth_controllers import verify_token
+from typing import List
+from app.models.user_model import UserCreate, UserResponse
+from app.controllers.user_controllers import UserController
+from app.controllers.auth_controllers import AuthController
+from app.core.database import Database
+
+db = Database()
+user_controller = UserController(db)
+auth_controller = AuthController(db)
 
 router = APIRouter(
     prefix="/users",
     tags=["Users"],
-    dependencies=[Depends(verify_token)]
+    dependencies=[Depends(auth_controller.verify_token)]
 )
 
-@router.post("/")
-def create_user(user: User):
-    if users_collection.find_one({"username": user.username}):
-        raise HTTPException(status_code=400, detail="Username already exists")
-    users_collection.insert_one(user.dict())
-    return {"message": "User created successfully", "user": user}
+@router.post("/", response_model=UserResponse)
+def create_user(user: UserCreate):
+    created_user, error = user_controller.create_user(user)
+    if error:
+        raise HTTPException(status_code=400, detail=error)
+    return created_user
 
-@router.get("/")
+@router.get("/", response_model=List[UserResponse])
 def get_users():
-    return list(users_collection.find({}, {"_id": 0}))
+    return user_controller.get_all_users()
 
-@router.get("/{user_id}")
+@router.get("/{user_id}", response_model=UserResponse)
 def get_user(user_id: str):
-    user = users_collection.find_one({"_id": user_id}, {"_id": 0})
+    user = user_controller.get_user_by_id(user_id)
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
     return user
 
 @router.put("/{user_id}")
-def update_user(user_id: str, user: User):
-    result = users_collection.update_one({"_id": user_id}, {"$set": user.dict()})
-    if result.matched_count == 0:
+def update_user(user_id: str, user: UserCreate):
+    matched_count = user_controller.update_user_by_id(user_id, user)
+    if matched_count == 0:
         raise HTTPException(status_code=404, detail="User not found")
     return {"message": "User updated successfully"}
 
 @router.delete("/{user_id}")
 def delete_user(user_id: str):
-    result = users_collection.delete_one({"_id": user_id})
-    if result.deleted_count == 0:
+    deleted_count = user_controller.delete_user_by_id(user_id)
+    if deleted_count == 0:
         raise HTTPException(status_code=404, detail="User not found")
     return {"message": "User deleted successfully"}

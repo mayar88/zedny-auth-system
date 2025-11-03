@@ -1,39 +1,60 @@
-from app.models.instructor_model import Instructor
-from app.core.database import instructors_collection
+from app.core.database import Database
+from app.models.instructor_model import InstructorCreate, InstructorResponse
 from bson import ObjectId
 
+class InstructorController:
+    def __init__(self, db: Database):
+        self.instructors_collection = db.instructors
 
-# Create a new instructor
-def create_instructor_logic(instructor: Instructor):
-    # Check uniqueness by name
-    if instructors_collection.find_one({"name": instructor.name}):
-        return None, "Instructor with this name already exists."
+    def create_instructor_logic(self, instructor: InstructorCreate):
+        instructor_dict = instructor.dict(by_alias=True)
+        if self.instructors_collection.find_one({"name": instructor.name}):
+            return None, "Instructor with this name already exists."
+        result = self.instructors_collection.insert_one(instructor_dict)
+        created = self.instructors_collection.find_one({"_id": result.inserted_id})
+        if created:
+            # convert ObjectId to string but keep key '_id'
+            created['_id'] = str(created['_id'])
+        return InstructorResponse.model_validate(created), None
 
-    result = instructors_collection.insert_one(instructor.dict(by_alias=True))
-    instructor.id = str(result.inserted_id)
-    return instructor, None
+    def get_all_instructors(self):
+        instructors = list(self.instructors_collection.find())
+        for inst in instructors:
+            inst["id"] = str(inst["_id"])  # convert ObjectId to string
+            del inst["_id"]
+        return instructors
+
+    def get_instructor_by_id(self, instructor_id: str):
+        try:
+            oid = ObjectId(instructor_id)
+        except Exception:
+            return None  # invalid ObjectId format
+
+        instructor = self.instructors_collection.find_one({"_id": oid})
+        if instructor:
+            instructor["_id"] = str(instructor["_id"])
+            # ✅ Return as Pydantic model, not dict
+            return InstructorResponse.model_validate(instructor)
+        return None
 
 
-# Get all instructors
-def get_all_instructors():
-    return list(instructors_collection.find({}, {"_id": 0}))
+    def update_instructor_by_id(self, instructor_id: str, instructor: InstructorCreate):
+        try:
+            oid = ObjectId(instructor_id)
+        except Exception:
+            return 0  # invalid ObjectId format
 
+        result = self.instructors_collection.update_one(
+            {"_id": oid},
+            {"$set": instructor.dict(exclude={"id"}, by_alias=True)}
+        )
+        return result.matched_count
 
-# Get a single instructor by MongoDB _id
-def get_instructor_by_id(instructor_id: str):
-    return instructors_collection.find_one({"_id": ObjectId(instructor_id)}, {"_id": 0})
+    def delete_instructor_by_id(self, instructor_id: str):
+        try:
+            oid = ObjectId(instructor_id)
+        except Exception:
+            return 0  # invalid ObjectId format
 
-
-# Update an instructor by MongoDB _id
-def update_instructor_by_id(instructor_id: str, instructor: Instructor):
-    result = instructors_collection.update_one(
-        {"_id": ObjectId(instructor_id)},
-        {"$set": instructor.dict(exclude={"id"}, by_alias=True)}
-    )
-    return result.matched_count
-
-
-# Delete an instructor by MongoDB _id
-def delete_instructor_by_id(instructor_id: str):
-    result = instructors_collection.delete_one({"_id": ObjectId(instructor_id)})
-    return result.deleted_count
+        result = self.instructors_collection.delete_one({"_id": oid})
+        return result.deleted_count
