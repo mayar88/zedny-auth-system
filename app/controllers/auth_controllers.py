@@ -1,7 +1,7 @@
 from app.core.database import Database
 from app.models.user_model import UserCreate
 from passlib.context import CryptContext
-from jose import jwt
+from jose import jwt,JWTError
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from datetime import datetime, timedelta, timezone
@@ -47,8 +47,21 @@ class AuthController:
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Invalid or missing token"
             )
-        # Optional: decode/verify JWT token
-        return token
+        try:
+            payload = jwt.decode(token, self.SECRET_KEY, algorithms=[self.ALGORITHM])
+            user_id: str = payload.get("sub")
+            role: str = payload.get("role")
+            if user_id is None or role is None:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="Invalid token payload"
+                )
+            return {"id": user_id, "role": role}
+        except JWTError:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Token is invalid or expired"
+            )
 
     # --- Auth logic functions ---
 
@@ -64,5 +77,7 @@ class AuthController:
         user = self.users_collection.find_one({"username": username})
         if not user or not self.verify_password(password, user["password"]):
             return None, "Invalid username or password"
-        token = self.create_access_token({"sub": str(user["_id"])})
+        role = user.get("role", "user")  # default role fallback
+        token = self.create_access_token({"sub": str(user["_id"]), "role": role})
         return token, None
+

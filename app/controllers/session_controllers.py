@@ -4,6 +4,8 @@ from app.controllers.instructor_controllers import InstructorController
 from app.controllers.user_controllers import UserController
 from bson import ObjectId
 
+
+
 class SessionController:
     def __init__(self, db: Database):
         self.sessions_collection = db.sessions
@@ -112,3 +114,15 @@ class SessionController:
             return 0
         result = self.sessions_collection.delete_one({"_id": oid})
         return result.deleted_count
+
+    db = Database()
+    def get_session_from_db(self,session_id: str):
+        try:
+            oid = ObjectId(session_id)
+        except Exception:
+            return None
+
+        session = self.db.sessions.find_one({"_id": oid})
+        if session:
+            session["id"] = str(session["_id"])  # convert ObjectId to string
+        return session
